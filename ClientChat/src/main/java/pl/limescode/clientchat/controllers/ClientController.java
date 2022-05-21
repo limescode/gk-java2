@@ -1,17 +1,22 @@
 package pl.limescode.clientchat.controllers;
 
+import pl.limescode.clientchat.dialogs.Dialogs;
+import pl.limescode.clientchat.model.Network;
+import pl.limescode.clientchat.model.ReadMessageListener;
+import pl.limescode.command.Command;
+import pl.limescode.command.CommandType;
+import pl.limescode.command.commands.commands.ClientMessageCommandData;
+import pl.limescode.command.commands.commands.UpdateUserListCommandData;
+import javafx.application.Platform;
+import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import pl.limescode.clientchat.ClientChatApp;
-import pl.limescode.clientchat.Network;
-
 import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.function.Consumer;
 
 public class ClientController {
 
@@ -27,8 +32,6 @@ public class ClientController {
     @FXML
     public ListView userList;
 
-    private ClientChatApp application;
-
     public void sendMessage() {
         String message = messageTextArea.getText();
 
@@ -43,13 +46,19 @@ public class ClientController {
         }
 
         try {
-            message = sender != null ? String.format(": ", sender, message) : message; // Server: message
-            Network.getInstance().sendMessage(message);
+            if (sender != null) {
+                Network.getInstance().sendPrivateMessage(sender, message);
+            } else {
+                Network.getInstance().sendMessage(message);
+            }
+
         } catch (IOException e) {
-            application.showErrorDialog("Ошибка передачи данных по сети");
+            Dialogs.NetworkError.SEND_MESSAGE.show();
         }
 
         appendMessageToChat("Я", message);
+        requestFocusForTextArea();
+        messageTextArea.clear();
     }
 
     public void appendMessageToChat(String sender, String message) {
@@ -64,24 +73,28 @@ public class ClientController {
         chatTextArea.appendText(message);
         chatTextArea.appendText(System.lineSeparator());
         chatTextArea.appendText(System.lineSeparator());
-        messageTextArea.requestFocus();
-        messageTextArea.clear();
+
+    }
+
+    private void requestFocusForTextArea() {
+        Platform.runLater(() -> messageTextArea.requestFocus());
     }
 
     public void initializeMessageHandler() {
-        Network.getInstance().waitMessages(new Consumer<String>() {
+        Network.getInstance().addReadMessageListener(new ReadMessageListener() {
             @Override
-            public void accept(String message) {
-                appendMessageToChat("Server", message);
+            public void processReceivedCommand(Command command) {
+                if (command.getType() == CommandType.CLIENT_MESSAGE) {
+                    ClientMessageCommandData data = (ClientMessageCommandData) command.getData();
+                    appendMessageToChat(data.getSender(), data.getMessage());
+                } else if (command.getType() == CommandType.UPDATE_USERS_LIST) {
+                    UpdateUserListCommandData data = (UpdateUserListCommandData) command.getData();
+                    Platform.runLater(() -> {
+                        userList.setItems(FXCollections.observableArrayList(data.getUsers()));
+                    });
+                }
+
             }
         });
-    }
-
-    public ClientChatApp getApplication() {
-        return application;
-    }
-
-    public void setApplication(ClientChatApp application) {
-        this.application = application;
     }
 }
