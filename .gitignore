@@ -24,3 +24,5 @@ hs_err_pid*
 /.idea/
 /gk-java2.iml
 /ClientChat/target/
+/Server/Server.iml
+/Commands/Commands.iml
